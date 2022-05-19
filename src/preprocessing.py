@@ -1,67 +1,62 @@
 import tensorflow as tf
-import numpy as np
 from tensorflow.keras import layers
 
+def dataframe_to_dataset(dataframe, shuffle=True, batch_size=32):
+    df = dataframe.copy()
+    labels = df.pop("Star type")
+    df = {key: value[:, tf.newaxis] for key, value in dataframe.items()}
+    ds = tf.data.Dataset.from_tensor_slices((dict(df), labels))
+    if shuffle:
+        ds = ds.shuffle(buffer_size=len(dataframe))
+    ds = ds.batch(batch_size)
+    ds = ds.prefetch(batch_size)
 
-def prepare_data(features):
-    inputs = create_inputs(features)
-    numeric_inputs, string_inputs = separate_inputs_by_type(inputs)
-
-    normalized_numeric = normalize_numeric(features, numeric_inputs)
-    processed_strings = string_lookup(features, string_inputs)
-
-    all_features = [normalized_numeric]
-
-    for string in processed_strings:
-        all_features.append(string)
-
-    preprocessed_inputs = layers.Concatenate()(all_features)
-
-    return inputs, preprocessed_inputs
+    return ds
 
 
-def create_inputs(features):
-    inputs = {}
-    for name, column in features.items():
-        dtype = column.dtype
-        if dtype == object:
-            dtype = tf.string
+def normalization_layer(name, dataset):
+    normalizer = layers.Normalization(axis=None)
+    # Prepare a Dataset that only yields the feature.
+    feature_ds = dataset.map(lambda x, y: x[name])
+    normalizer.adapt(feature_ds)
+    return normalizer
+
+
+def cat_encoding_layer(name, dataset):
+    index = layers.StringLookup()
+    feature_ds = dataset.map(lambda x, y: x[name])
+    index.adapt(feature_ds)
+    encoder = layers.CategoryEncoding(num_tokens=index.vocabulary_size())
+    return lambda feature: encoder(index(feature))
+
+def encode_features(train_ds, normalize_numeric=True):
+    all_inputs = []
+    encoded_features = []
+
+    num_param_headers = [
+        "Temperature (K)",
+        "Luminosity(L/Lo)",
+        "Radius(R/Ro)",
+        "Absolute magnitude(Mv)",
+    ]
+    string_param_headers = ["Star color", "Spectral Class"]
+
+    for header in num_param_headers:
+        numeric_col = tf.keras.Input(shape=(1,), name=header)
+        all_inputs.append(numeric_col)  
+        if normalize_numeric:
+            norm_layer = normalization_layer(header, train_ds)
+            enc_num_col = norm_layer(numeric_col)   
+            encoded_features.append(enc_num_col)
         else:
-            dtype = tf.float32
+            encoded_features.append(numeric_col)
 
-        inputs[name] = tf.keras.Input(shape=(1,), name=name, dtype=dtype)
+    for header in string_param_headers:
+        cat_col = tf.keras.Input(shape=(1,), name=header, dtype=tf.string)
+        enc_layer = cat_encoding_layer(header, train_ds)
+        enc_cat_col = enc_layer(cat_col)
+        all_inputs.append(cat_col)
+        encoded_features.append(enc_cat_col)
 
-    return inputs
+    return (all_inputs, encoded_features)
 
-
-def separate_inputs_by_type(inputs):
-    numeric_inputs = {
-        name: input for name, input in inputs.items() if input.dtype == tf.float32
-    }
-
-    string_inputs = {
-        name: input for name, input in inputs.items() if input.dtype == tf.string
-    }
-
-    return numeric_inputs, string_inputs
-
-
-def normalize_numeric(features, inputs):
-    concat = layers.Concatenate()(list(inputs.values()))
-    normalize = layers.Normalization()
-    normalize.adapt(np.array(features[inputs.keys()]))
-    normalized_inputs = normalize(concat)
-    return normalized_inputs
-
-
-def string_lookup(features, inputs):
-    processed_inputs = []
-    for name, input in inputs.items():
-        if input.dtype == tf.float32:
-            continue
-
-        lookup = layers.StringLookup(vocabulary=np.unique(features[name]))
-        one_hot = layers.CategoryEncoding(num_tokens=lookup.vocabulary_size())
-        processed_inputs.append(one_hot(lookup(input)))
-
-    return processed_inputs
