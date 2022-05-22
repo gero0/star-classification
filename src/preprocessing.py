@@ -3,7 +3,7 @@ from tensorflow.keras import layers
 
 def dataframe_to_dataset(dataframe, shuffle=True, batch_size=32):
     df = dataframe.copy()
-    labels = df.pop("Star type")
+    labels = df.pop("StarType")
     df = {key: value[:, tf.newaxis] for key, value in dataframe.items()}
     ds = tf.data.Dataset.from_tensor_slices((dict(df), labels))
     if shuffle:
@@ -34,12 +34,12 @@ def encode_features(train_ds, normalize_numeric=True):
     encoded_features = []
 
     num_param_headers = [
-        "Temperature (K)",
-        "Luminosity(L/Lo)",
-        "Radius(R/Ro)",
-        "Absolute magnitude(Mv)",
+        "Temperature",
+        "Luminosity",
+        "Radius",
+        "AbsoluteMagnitude",
     ]
-    string_param_headers = ["Star color", "Spectral Class"]
+    string_param_headers = ["StarColor", "SpectralClass"]
 
     for header in num_param_headers:
         numeric_col = tf.keras.Input(shape=(1,), name=header)

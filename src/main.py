@@ -1,4 +1,5 @@
 import os
+from unicodedata import name
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -29,10 +30,10 @@ def plot_history(history, name):
 
 
 def create_model(inputs, encoded_features):
-    all_features = tf.keras.layers.concatenate(encoded_features)
-    m = tf.keras.layers.Dense(6, activation="relu")(all_features)
+    all_features = tf.keras.layers.concatenate(encoded_features, name="Input")
+    m = tf.keras.layers.Dense(6, activation="relu", name="Hidden")(all_features)
     # output layer - 6 categories of stars
-    output = tf.keras.layers.Dense(6, activation="softmax")(m)
+    output = tf.keras.layers.Dense(6, activation="softmax", name="Output")(m)
     model = tf.keras.Model(inputs, output)
     model.compile(
         optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"]
@@ -43,7 +44,7 @@ def create_model(inputs, encoded_features):
 random_state = 2137
 
 dataframe = pd.read_csv("6 class csv.csv")
-dataframe["Star color"] = dataframe["Star color"].str.upper()
+dataframe["StarColor"] = dataframe["StarColor"].str.upper()
 
 train = dataframe.sample(frac=0.6, random_state=random_state)
 remaining = dataframe.drop(train.index)
@@ -60,7 +61,7 @@ batch_sizes = [1, 2, 4, 8, 16, 32]
 results = dict()
 
 for batch_size in batch_sizes:
-
+    print("Normalizing for batch size: ", batch_size)
     train_ds = preprocessing.dataframe_to_dataset(train, batch_size=batch_size)
     val_ds = preprocessing.dataframe_to_dataset(
         val, shuffle=False, batch_size=batch_size
@@ -73,24 +74,26 @@ for batch_size in batch_sizes:
     (nn_inputs, nn_encoded_features) = preprocessing.encode_features(train_ds, False)
 
     model = create_model(inputs, encoded_features)
-
-    tf.keras.utils.plot_model(model, show_shapes=True, rankdir="LR")
-    history = model.fit(train_ds, epochs=1000, validation_data=val_ds, verbose=0)
+    print("Training on  batch size: ", batch_size)
+    tf.keras.utils.plot_model(model, rankdir="LR", show_layer_activations=True)
+    history = model.fit(train_ds, epochs=500, validation_data=val_ds, verbose=0)
 
     loss, accuracy = model.evaluate(test_ds)
     print("Accuracy_" + str(batch_size), accuracy)
     plot_history(history, "history_" + str(batch_size))
+    model.save('./models/{}'.format(batch_size))
 
     model_nn = create_model(nn_inputs, nn_encoded_features)
-
+    print("Training NN for batch size: ", batch_size)
     tf.keras.utils.plot_model(
-        model_nn, show_shapes=True, rankdir="LR", to_file="model_nn.png"
+        model_nn, rankdir="LR", to_file="model_nn.png", show_layer_activations=True
     )
     history_nn = model_nn.fit(train_ds, epochs=500, validation_data=val_ds, verbose=0)
 
     loss_nn, accuracy_nn = model_nn.evaluate(test_ds)
     print("Accuracy_nn_" + str(batch_size), accuracy_nn)
     plot_history(history_nn, "history_nn_" + str(batch_size))
+    model_nn.save('./models/nn_{}'.format(batch_size))
 
     results[batch_size] = (accuracy, loss, accuracy_nn, loss_nn)
 

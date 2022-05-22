@@ -1,4 +1,4 @@
-Temperature (K),Luminosity(L/Lo),Radius(R/Ro),Absolute magnitude(Mv),Star type,Star color,Spectral Class
+Temperature,Luminosity,Radius,AbsoluteMagnitude,StarType,StarColor,SpectralClass
 39000,204000,10.6,-4.7,3,Blue,O
 33750,220000,26,-6.1,4,Blue,B
 36108,198000,10.2,-4.4,3,Blue,O
